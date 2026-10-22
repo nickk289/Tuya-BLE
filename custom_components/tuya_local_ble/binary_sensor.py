@@ -53,6 +53,27 @@ class TuyaBLECategoryBinarySensorMapping:
     mapping: list[TuyaBLEBinarySensorMapping] | None = None
 
 mapping: dict[str, TuyaBLECategoryBinarySensorMapping] = {
+    "jtmspro": TuyaBLECategoryBinarySensorMapping(
+        products={
+            "zyvo0vlb": [  # Raykube K20
+                TuyaBLEBinarySensorMapping(
+                    dp_id=24,
+                    description=BinarySensorEntityDescription(
+                        key="doorbell",
+                        icon="mdi:bell-ring",
+                    ),
+                ),
+                TuyaBLEBinarySensorMapping(
+                    dp_id=32,
+                    description=BinarySensorEntityDescription(
+                        key="reverse_lock",
+                        icon="mdi:lock-alert",
+                        entity_category=EntityCategory.DIAGNOSTIC,
+                    ),
+                ),
+            ],
+        },
+    ),
     "wk": TuyaBLECategoryBinarySensorMapping(
         products={
             "drlajpqc": [  # Thermostatic Radiator Valve

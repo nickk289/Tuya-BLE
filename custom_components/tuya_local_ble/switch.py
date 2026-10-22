@@ -172,6 +172,16 @@ mapping: dict[str, TuyaBLECategorySwitchMapping] = {
                     ),
                 ),
             ],
+            "zyvo0vlb": [  # Raykube K20
+                TuyaBLESwitchMapping(
+                    dp_id=33,
+                    description=SwitchEntityDescription(
+                        key="automatic_lock",
+                        icon="mdi:lock-clock",
+                        entity_category=EntityCategory.CONFIG,
+                    ),
+                ),
+            ],
         },
     ),
     "ms": TuyaBLECategorySwitchMapping(
@@ -472,6 +482,9 @@ class TuyaBLESwitch(TuyaBLEEntity, SwitchEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
+        if self._device.product_id == "zyvo0vlb":
+            # K20: settings are sent on demand, the lock need not be connected
+            return True
         result = super().available
         if result and self._mapping.is_available:
             result = self._mapping.is_available(self, self._product)

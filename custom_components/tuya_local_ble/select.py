@@ -133,6 +133,37 @@ mapping: dict[str, TuyaBLECategorySelectMapping] = {
                     ),
                 ),
             ],
+            "zyvo0vlb":  # Raykube K20
+            [
+                TuyaBLESelectMapping(
+                    dp_id=31,
+                    description=SelectEntityDescription(
+                        key="beep_volume",
+                        options=[
+                            "mute",
+                            "low",
+                            "normal",
+                            "high",
+                        ],
+                        entity_category=EntityCategory.CONFIG,
+                    ),
+                ),
+                TuyaBLESelectMapping(
+                    dp_id=89,
+                    description=SelectEntityDescription(
+                        key="autolock_delay_level",
+                        options=[
+                            "inactive",
+                            "4s",
+                            "6s",
+                            "8s",
+                            "10s",
+                            "12s",
+                        ],
+                        entity_category=EntityCategory.CONFIG,
+                    ),
+                ),
+            ],
             "hc7n0urm":  # Raykube A1 Ultra / A1 Pro Max TuyaOS FD50 lock
             [
                 TuyaBLESelectMapping(
@@ -342,6 +373,8 @@ class TuyaBLESelect(TuyaBLEEntity, SelectEntity):
             return self._mapping.dp_id in (31, 48)
         if self._device.product_id == "ikphogdj":
             return self._mapping.dp_id in (31, 48)
+        if self._device.product_id == "zyvo0vlb":
+            return self._mapping.dp_id in (31, 89)
         return False
 
     def _option_from_datapoint(self) -> str | None:

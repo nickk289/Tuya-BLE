@@ -92,11 +92,28 @@
         },
         "lock_direction": {
           "name": "Lock Direction"
+        },
+        "autolock_delay_level": {
+          "name": "Auto-lock Delay",
+          "state": {
+            "inactive": "Off",
+            "4s": "4 s",
+            "6s": "6 s",
+            "8s": "8 s",
+            "10s": "10 s",
+            "12s": "12 s"
+          }
         }  
       },
       "binary_sensor": {
         "low_battery": {
           "name": "Low"
+        },
+        "doorbell": {
+          "name": "Doorbell"
+        },
+        "reverse_lock": {
+          "name": "Locked From Inside"
         }
       },
       "sensor": {
@@ -151,7 +168,32 @@
             "name": "Battery"
         },
         "alarm_lock": {
-            "name": "Alarm"
+          "name": "Alarm",
+          "state": {
+            "wrong_finger": "Wrong fingerprint",
+            "wrong_password": "Wrong password",
+            "wrong_card": "Wrong card",
+            "wrong_face": "Wrong face",
+            "tongue_bad": "Latch fault",
+            "too_hot": "Overheated",
+            "unclosed_time": "Door left open",
+            "tongue_not_out": "Latch not extended",
+            "pry": "Tamper (pry)",
+            "key_in": "Key inserted",
+            "low_battery": "Low battery",
+            "power_off": "Power off",
+            "shock": "Shock",
+            "defense": "Defense mode"
+          }
+        },
+        "last_password_unlock_id": {
+          "name": "Last Password Unlock ID"
+        },
+        "last_card_unlock_id": {
+          "name": "Last Card Unlock ID"
+        },
+        "last_ble_unlock_id": {
+          "name": "Last Bluetooth Unlock ID"
         },
         "wrong_finger": {
             "name": "Wrong Fingerprint"

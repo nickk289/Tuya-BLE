@@ -173,6 +173,27 @@ mapping: dict[str, TuyaBLECategoryLockMapping] = {
                     ),
                 ),
             ],
+            "zyvo0vlb":  # Raykube K20 (model F302), classic Tuya BLE (service a201)
+            [
+                TuyaBLELockMapping(
+                    # No real "unlock" DP: dp 6 is only the integration-side
+                    # trigger. tuya_ble.py turns it into a write of DP 71
+                    # (ble_unlock_check). Lock = manual_lock (dp 46).
+                    dp_id_unlock=6,
+                    dp_id_lock=46,
+                    # dp 47 = lock_motor_state. False = locked, True = unlocked.
+                    dp_id=47,
+                    value_means_locked=False,
+                    # The K20 has no dp 52, so a keep-alive NOP is not
+                    # possible; it connects on demand instead.
+                    dp_id_nop=52,
+                    keep_connect=False,
+                    keep_connect_timer=60,
+                    description=LockEntityDescription(
+                        key="manual_lock"
+                    ),
+                ),
+            ],
             "c6hfl8bt":  # MYPIN HS0358 cabinet lock, TuyaOS FD50 transport
             [
                 TuyaBLELockMapping(
@@ -422,7 +443,7 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        if self._device.product_id in ("hc7n0urm", "y2yaegze"):
+        if self._device.product_id in ("hc7n0urm", "y2yaegze", "zyvo0vlb"):
             # Battery locks sleep and may not keep an active BLE connection between
             # commands. Allow Home Assistant to call unlock; the command path will
             # establish a connection on demand.

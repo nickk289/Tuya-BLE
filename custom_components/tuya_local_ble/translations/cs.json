@@ -1,0 +1,72 @@
+{
+  "entity": {
+    "sensor": {
+      "alarm_lock": {
+        "name": "Alarm",
+        "state": {
+          "wrong_finger": "Špatný otisk",
+          "wrong_password": "Špatné heslo",
+          "wrong_card": "Špatná karta",
+          "wrong_face": "Špatný obličej",
+          "tongue_bad": "Porucha západky",
+          "too_hot": "Přehřátí",
+          "unclosed_time": "Dveře zůstaly otevřené",
+          "tongue_not_out": "Západka nevysunuta",
+          "pry": "Násilné otevření",
+          "key_in": "Vložen klíč",
+          "low_battery": "Slabá baterie",
+          "power_off": "Vypnuto napájení",
+          "shock": "Náraz",
+          "defense": "Režim obrany"
+        }
+      },
+      "last_fingerprint_unlock_slot": {
+        "name": "Poslední otisk (pozice)"
+      },
+      "last_password_unlock_id": {
+        "name": "Poslední heslo (ID)"
+      },
+      "last_card_unlock_id": {
+        "name": "Poslední karta (ID)"
+      },
+      "last_ble_unlock_id": {
+        "name": "Poslední odemknutí Bluetooth (ID)"
+      }
+    },
+    "select": {
+      "beep_volume": {
+        "name": "Hlasitost zámku",
+        "state": {
+          "mute": "Ticho",
+          "low": "Nízká",
+          "normal": "Střední",
+          "high": "Vysoká"
+        }
+      },
+      "autolock_delay_level": {
+        "name": "Zpoždění automatického zamčení",
+        "state": {
+          "inactive": "Vypnuto",
+          "4s": "4 s",
+          "6s": "6 s",
+          "8s": "8 s",
+          "10s": "10 s",
+          "12s": "12 s"
+        }
+      }
+    },
+    "binary_sensor": {
+      "doorbell": {
+        "name": "Zvonek"
+      },
+      "reverse_lock": {
+        "name": "Zamčeno zevnitř"
+      }
+    },
+    "switch": {
+      "automatic_lock": {
+        "name": "Automatické zamykání"
+      }
+    }
+  }
+}

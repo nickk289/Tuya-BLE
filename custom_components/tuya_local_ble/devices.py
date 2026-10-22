@@ -230,6 +230,10 @@ devices_database: dict[str, TuyaBLECategoryInfo] = {
             TuyaBLEProductInfo(
                 name="Smart Lock",
             ),
+            "zyvo0vlb":  # Raykube K20, model F302
+            TuyaBLEProductInfo(
+                name="Raykube K20",
+            ),
         },
     ),    
     "szjqr": TuyaBLECategoryInfo(

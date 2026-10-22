@@ -232,6 +232,70 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
                     ],
                 ),
             ],
+            "zyvo0vlb":  # Raykube K20 (model F302)
+            [
+                TuyaBLEBatteryMapping(
+                    # dp 8 (residual_electricity), 0-100 %. Also reported by
+                    # mains-powered units, where it is a constant.
+                    dp_id=8,
+                ),
+                TuyaBLESensorMapping(
+                    dp_id=21,
+                    description=SensorEntityDescription(
+                        key="alarm_lock",
+                        icon="mdi:alarm-light",
+                        device_class=SensorDeviceClass.ENUM,
+                        options=[
+                            "wrong_finger",
+                            "wrong_password",
+                            "wrong_card",
+                            "wrong_face",
+                            "tongue_bad",
+                            "too_hot",
+                            "unclosed_time",
+                            "tongue_not_out",
+                            "pry",
+                            "key_in",
+                            "low_battery",
+                            "power_off",
+                            "shock",
+                            "defense",
+                        ],
+                    ),
+                ),
+                TuyaBLESensorMapping(
+                    dp_id=12,
+                    description=SensorEntityDescription(
+                        key="last_fingerprint_unlock_slot",
+                        icon="mdi:fingerprint",
+                        entity_category=EntityCategory.DIAGNOSTIC,
+                    ),
+                ),
+                TuyaBLESensorMapping(
+                    dp_id=13,
+                    description=SensorEntityDescription(
+                        key="last_password_unlock_id",
+                        icon="mdi:dialpad",
+                        entity_category=EntityCategory.DIAGNOSTIC,
+                    ),
+                ),
+                TuyaBLESensorMapping(
+                    dp_id=15,
+                    description=SensorEntityDescription(
+                        key="last_card_unlock_id",
+                        icon="mdi:card-account-details",
+                        entity_category=EntityCategory.DIAGNOSTIC,
+                    ),
+                ),
+                TuyaBLESensorMapping(
+                    dp_id=19,
+                    description=SensorEntityDescription(
+                        key="last_ble_unlock_id",
+                        icon="mdi:bluetooth",
+                        entity_category=EntityCategory.DIAGNOSTIC,
+                    ),
+                ),
+            ],
             "y2yaegze":  # CTL20H SmartLock, TuyaOS FD50
             [
                 TuyaBLEBatteryMapping(

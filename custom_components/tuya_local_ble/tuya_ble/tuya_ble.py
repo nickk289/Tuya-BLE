@@ -2106,6 +2106,20 @@ class TuyaBLEDevice:
                 )
             return
 
+        if self.product_id == "zyvo0vlb" and 6 in datapoint_ids:
+            # Raykube K20 (classic Tuya BLE framing). DP6 is only the
+            # integration-side trigger: on the wire the unlock is a normal
+            # DPS write of DP71 (ble_unlock_check, raw, 19 bytes).
+            unlock_value = self._build_raykube_unlock_value()
+            unlock_data = pack(
+                ">BBB",
+                71,
+                int(TuyaBLEDataPointType.DT_RAW.value),
+                len(unlock_value),
+            ) + unlock_value
+            await self._send_packet(TuyaBLECode.FUN_SENDER_DPS, unlock_data, False)
+            return
+
         #await self._send_packet(TuyaBLECode.FUN_SENDER_DPS, data)
         await self._send_packet(TuyaBLECode.FUN_SENDER_DPS, data, False)
 
@@ -2141,10 +2155,38 @@ class TuyaBLEDevice:
         if len(check) < 19:
             raise TuyaBLEDataLengthError()
 
+        return (
+            b"\x00\x00\x00\x00\x01\x47\x00\x00\x13"
+            + self._build_raykube_unlock_value()
+        )
+
+    def _build_raykube_unlock_value(self) -> bytes:
+        """Build the 19-byte DP71 value used to unlock Raykube locks.
+
+        Layout: <2 byte prefix> 00 01 <8 ASCII digits> 01 <4 byte key> 00 01,
+        derived from the device-specific `ble_unlock_check` cloud status.
+        Shared by the FD50 V4 path and the classic (K20) DPS path.
+        """
+        if not self.ble_unlock_check:
+            raise TuyaBLEDeviceError(
+                "This lock requires the device-specific ble_unlock_check "
+                "value in tuya_local_ble/devices.json"
+            )
+
+        try:
+            check = base64.b64decode(self.ble_unlock_check)
+        except Exception as exc:
+            raise TuyaBLEDeviceError(
+                "ble_unlock_check must be a valid base64 Tuya status value"
+            ) from exc
+
+        if len(check) < 19:
+            raise TuyaBLEDataLengthError()
+
         prefix = check[2:4]
         check_code = check[4:12]
         check_key = check[13:17]
-        return b"\x00\x00\x00\x00\x01\x47\x00\x00\x13" + prefix + b"\x00\x01" + check_code + b"\x01" + check_key + b"\x00\x01"
+        return prefix + b"\x00\x01" + check_code + b"\x01" + check_key + b"\x00\x01"
 
     def _build_raykube_v4_enum_data(self, dp_id: int) -> bytes:
         """Build a Raykube/TuyaOS FD50 one-byte V4 enum write."""
@@ -2231,6 +2273,13 @@ class TuyaBLEDevice:
                 )
                 await self.soft_disconnect()
             raise TuyaBLEDeviceError(0)
+
+        if self.product_id == "zyvo0vlb":
+            # Raykube K20: classic V3 framing; the lock sleeps between
+            # commands, so allow connecting on demand even when the
+            # protocol version is not yet known.
+            await self._send_datapoints_v3(datapoint_ids)
+            return
 
         if self._protocol_version == 3:
             await self._send_datapoints_v3(datapoint_ids)
