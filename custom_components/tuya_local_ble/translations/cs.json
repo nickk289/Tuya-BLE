@@ -64,8 +64,8 @@
       }
     },
     "switch": {
-      "automatic_lock": {
-        "name": "Automatické zamykání"
+      "passage_mode": {
+        "name": "Průchozí režim (trvale odemčeno)"
       }
     }
   }

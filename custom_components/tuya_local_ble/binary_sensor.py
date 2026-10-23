@@ -60,6 +60,7 @@ mapping: dict[str, TuyaBLECategoryBinarySensorMapping] = {
                     dp_id=24,
                     description=BinarySensorEntityDescription(
                         key="doorbell",
+                        entity_registry_enabled_default=False,
                         icon="mdi:bell-ring",
                     ),
                 ),

@@ -57,6 +57,10 @@ class TuyaBLELockMapping:
     # (momentary trigger); toggle-style DPs (e.g. passage mode) differ.
     dp_value_lock: bool = True
     dp_value_unlock: bool = True
+    # Seconds to wait for the lock to reach the commanded state before it is
+    # reported as jammed. Sleeping locks that only run a queued command after
+    # they wake up need a longer time.
+    jam_timeout: int = 12
 
 @dataclass
 class TuyaBLELockMapping(TuyaBLELockMapping):
@@ -184,11 +188,15 @@ mapping: dict[str, TuyaBLECategoryLockMapping] = {
                     # dp 47 = lock_motor_state. False = locked, True = unlocked.
                     dp_id=47,
                     value_means_locked=False,
-                    # The K20 has no dp 52, so a keep-alive NOP is not
-                    # possible; it connects on demand instead.
+                    # The K20 has no dp 52, so the keep-alive is a status request
+                    # instead (see send_nop_request). Persistent connection is
+                    # opt-in ("Keep connected" option), default: on demand.
                     dp_id_nop=52,
                     keep_connect=False,
                     keep_connect_timer=60,
+                    # A sleeping K20 may run a queued command only after it
+                    # wakes up, which can take well over 12 s.
+                    jam_timeout=90,
                     description=LockEntityDescription(
                         key="manual_lock"
                     ),
@@ -269,7 +277,13 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
     def send_nop_request(self):
         """Periodically touch a dummy DP to keep the BLE session alive."""
         while not self._keep_connect_stop.wait(self._mapping.keep_connect_timer):
-            if self._datapoint_nop:
+            if self._device.product_id == "zyvo0vlb":
+                # The K20 has no dp 52 to write: keep the session alive with a
+                # status request instead.
+                asyncio.run_coroutine_threadsafe(
+                    self._device.update(), self._hass.loop
+                )
+            elif self._datapoint_nop:
                 self._hass.create_task(self._datapoint_nop.set_value(True))
 
     async def async_will_remove_from_hass(self) -> None:
@@ -344,6 +358,8 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
             )
 
         self._target_state = state
+        # A new command starts a fresh attempt: drop a previous jam report.
+        self._isjammed = False
         self._update_attrs()
         self.async_write_ha_state()
 
@@ -420,6 +436,7 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
     def update_device_state(self):
         datapoint = self._device.datapoints[self._mapping.dp_id]
         if datapoint:
+            previous_state = self._current_state
             is_set = bool(datapoint.value)
             if self._mapping.value_means_locked:
                 self._current_state = LockState.LOCKED if is_set else LockState.UNLOCKED
@@ -427,12 +444,21 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
                 self._current_state = LockState.UNLOCKED if is_set else LockState.LOCKED
             if self._commanded:
                 if ( self._current_state != self._target_state):
-                    if ( datetime.now() > self._commanded_timer + timedelta(seconds = 12) ):
+                    if ( datetime.now() > self._commanded_timer + timedelta(seconds = self._mapping.jam_timeout) ):
                         self._isjammed = True
                         self._commanded = False
                 else:
                     self._commanded = False
                     self._isjammed = False
+            elif self._isjammed and (
+                self._current_state == self._target_state
+                or self._current_state != previous_state
+            ):
+                # The jam flag is only set after the command timed out. If the
+                # lock reaches the commanded state later (a delayed command on
+                # a sleeping lock) or changes state on its own (key, keypad),
+                # the flag is stale and must not stay set forever.
+                self._isjammed = False
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -471,7 +497,7 @@ async def async_setup_entry(
     raykube_keep_connected = bool(entry.options.get(CONF_KEEP_CONNECTED, False))
     for mapping in mappings:
         runtime_mapping = mapping
-        if data.device.product_id in ("hc7n0urm", "y2yaegze"):
+        if data.device.product_id in ("hc7n0urm", "y2yaegze", "zyvo0vlb"):
             runtime_mapping = replace(
                 mapping,
                 keep_connect=raykube_keep_connected,

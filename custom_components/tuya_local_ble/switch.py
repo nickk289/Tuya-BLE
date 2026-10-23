@@ -174,10 +174,13 @@ mapping: dict[str, TuyaBLECategorySwitchMapping] = {
             ],
             "zyvo0vlb": [  # Raykube K20
                 TuyaBLESwitchMapping(
+                    # dp 33 is labelled "automatic_lock" in the Tuya schema,
+                    # but on the K20 it behaves as passage mode: the door
+                    # stays unlocked while it is on.
                     dp_id=33,
                     description=SwitchEntityDescription(
-                        key="automatic_lock",
-                        icon="mdi:lock-clock",
+                        key="passage_mode",
+                        icon="mdi:door-open",
                         entity_category=EntityCategory.CONFIG,
                     ),
                 ),

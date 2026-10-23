@@ -243,6 +243,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
                     dp_id=21,
                     description=SensorEntityDescription(
                         key="alarm_lock",
+                        entity_registry_enabled_default=False,
                         icon="mdi:alarm-light",
                         device_class=SensorDeviceClass.ENUM,
                         options=[
@@ -267,6 +268,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
                     dp_id=12,
                     description=SensorEntityDescription(
                         key="last_fingerprint_unlock_slot",
+                        entity_registry_enabled_default=False,
                         icon="mdi:fingerprint",
                         entity_category=EntityCategory.DIAGNOSTIC,
                     ),
@@ -275,6 +277,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
                     dp_id=13,
                     description=SensorEntityDescription(
                         key="last_password_unlock_id",
+                        entity_registry_enabled_default=False,
                         icon="mdi:dialpad",
                         entity_category=EntityCategory.DIAGNOSTIC,
                     ),
@@ -283,6 +286,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
                     dp_id=15,
                     description=SensorEntityDescription(
                         key="last_card_unlock_id",
+                        entity_registry_enabled_default=False,
                         icon="mdi:card-account-details",
                         entity_category=EntityCategory.DIAGNOSTIC,
                     ),
@@ -291,6 +295,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
                     dp_id=19,
                     description=SensorEntityDescription(
                         key="last_ble_unlock_id",
+                        entity_registry_enabled_default=False,
                         icon="mdi:bluetooth",
                         entity_category=EntityCategory.DIAGNOSTIC,
                     ),

@@ -215,6 +215,9 @@
         "automatic_lock": {
           "name": "Auto Lock"
         },
+        "passage_mode": {
+          "name": "Passage Mode"
+        },
         "programming_mode": {
           "name": "Programming Mode" 
         },

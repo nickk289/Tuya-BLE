@@ -26,13 +26,13 @@ hardware yet. Please report back if they work for you:
 
 | Entity | Type | DP | Notes |
 |---|---|---|---|
-| Auto Lock | switch | 33 `automatic_lock` | |
+| Passage Mode | switch | 33 (`automatic_lock` in the Tuya schema) | on = door stays unlocked; behaves as passage mode, not auto-lock (confirmed on hardware) |
 | Lock Volume | select | 31 `beep_volume` | mute / low / normal / high |
 | Auto-lock Delay | select | 89 `autolock_delay_level` | off / 4 / 6 / 8 / 10 / 12 s |
 | Battery | sensor | 8 `residual_electricity` | constant 100 % on mains-powered units |
-| Alarm | sensor | 21 `alarm_lock` | wrong fingerprint/password/card, tamper, ... |
-| Last fingerprint / password / card / Bluetooth unlock | sensors | 12 / 13 / 15 / 19 | ID or slot of the last unlock (diagnostic) |
-| Doorbell | binary sensor | 24 `doorbell` | |
+| Alarm | sensor | 21 `alarm_lock` | disabled by default, needs *Keep connected* |
+| Last fingerprint / password / card / Bluetooth unlock | sensors | 12 / 13 / 15 / 19 | disabled by default, needs *Keep connected* |
+| Doorbell | binary sensor | 24 `doorbell` | disabled by default, needs *Keep connected* |
 | Locked From Inside | binary sensor | 32 `reverse_lock` | inner deadbolt engaged |
 
 The Czech translation (`translations/cs.json`) is included as a partial file;
@@ -97,9 +97,16 @@ here sent with the classic V3 DPS command). Lock uses the plain `manual_lock` DP
 - Entities of type sensor/binary sensor only receive new values while a BLE session is open,
   so they can be stale or unavailable between commands. The settings entities (switch/select)
   stay available and are written on demand.
-- A persistent connection with a keep-alive is **not** implemented: the K20 does not
-  have DP 52 (used as a no-op by other locks). An experiment that kept the link open by
-  requesting the full status every 20 s did not improve stability.
+- **Alarm, doorbell and last-unlock sensors** are event data points: the lock only pushes
+  them while a BLE session is open. They are therefore disabled by default. To use them,
+  enable the entities and turn on *Keep connected (24/7)* in the device options. The K20
+  has no DP 52 (the no-op used by other locks), so the keep-alive requests the status every
+  60 s. This mode is experimental: an earlier test with a 20 s interval did not improve
+  stability, so leave it off if it makes the lock less reliable.
+- **Jammed state**: a sleeping lock may run a queued command only after waking up. The
+  lock entity waits 90 s (instead of 12 s) before reporting *jammed*, and the jammed flag
+  is cleared as soon as the lock reaches the commanded state later, changes state on its
+  own, or a new command is sent.
 - `Unexpcted packet` / `Missing packet` errors in the Home Assistant log (a BLE notification
   fragment was lost while reassembling a multi-packet reply) appeared occasionally during
   testing, together with the occasional delay, even with a strong signal (-39 dBm).
@@ -117,7 +124,7 @@ here sent with the classic V3 DPS command). Lock uses the plain `manual_lock` DP
 | 24 | `doorbell` | bool | doorbell |
 | 31 | `beep_volume` | enum | volume |
 | 32 | `reverse_lock` | bool | locked from inside |
-| 33 | `automatic_lock` | bool | auto lock |
+| 33 | `automatic_lock` | bool | passage mode (stays unlocked) |
 | 46 | `manual_lock` | bool | remote lock |
 | 47 | `lock_motor_state` | bool | lock state |
 | 71 | `ble_unlock_check` | raw | remote unlock |
