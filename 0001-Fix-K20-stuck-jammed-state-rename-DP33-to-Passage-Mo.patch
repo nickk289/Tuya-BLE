@@ -1,0 +1,283 @@
+From 69da76c85066baceb42363305f9924eb34c7b1ef Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 07:32:17 +0000
+Subject: [PATCH] Fix K20 stuck "jammed" state, rename DP33 to Passage Mode,
+ opt-in keep-connected
+
+- lock: clear a stale jammed flag when the lock later reaches the commanded
+  state, changes state on its own, or a new command is sent; add per-product
+  jam_timeout (K20: 90 s, others unchanged at 12 s)
+- switch: DP 33 on the K20 is passage mode (stays unlocked), not auto-lock
+- K20 can use the "Keep connected" option (status-request keep-alive), needed
+  for alarm/doorbell/unlock-ID event data points; these entities are now
+  disabled by default
+- docs and en/cs translations updated
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01M4FXkLhoGUcLZ3Bf91EKfe
+---
+ .../tuya_local_ble/binary_sensor.py           |  1 +
+ custom_components/tuya_local_ble/lock.py      | 36 ++++++++++++++++---
+ custom_components/tuya_local_ble/sensor.py    |  5 +++
+ custom_components/tuya_local_ble/switch.py    |  7 ++--
+ .../tuya_local_ble/translations/cs.json       |  4 +--
+ .../tuya_local_ble/translations/en.json       |  3 ++
+ docs/raykube-k20-zyvo0vlb.md                  | 23 +++++++-----
+ 7 files changed, 62 insertions(+), 17 deletions(-)
+
+diff --git a/custom_components/tuya_local_ble/binary_sensor.py b/custom_components/tuya_local_ble/binary_sensor.py
+index d98fd76..5eaae53 100644
+--- a/custom_components/tuya_local_ble/binary_sensor.py
++++ b/custom_components/tuya_local_ble/binary_sensor.py
+@@ -60,6 +60,7 @@ mapping: dict[str, TuyaBLECategoryBinarySensorMapping] = {
+                     dp_id=24,
+                     description=BinarySensorEntityDescription(
+                         key="doorbell",
++                        entity_registry_enabled_default=False,
+                         icon="mdi:bell-ring",
+                     ),
+                 ),
+diff --git a/custom_components/tuya_local_ble/lock.py b/custom_components/tuya_local_ble/lock.py
+index c8d50e6..32cbbb5 100644
+--- a/custom_components/tuya_local_ble/lock.py
++++ b/custom_components/tuya_local_ble/lock.py
+@@ -57,6 +57,10 @@ class TuyaBLELockMapping:
+     # (momentary trigger); toggle-style DPs (e.g. passage mode) differ.
+     dp_value_lock: bool = True
+     dp_value_unlock: bool = True
++    # Seconds to wait for the lock to reach the commanded state before it is
++    # reported as jammed. Sleeping locks that only run a queued command after
++    # they wake up need a longer time.
++    jam_timeout: int = 12
+ 
+ @dataclass
+ class TuyaBLELockMapping(TuyaBLELockMapping):
+@@ -184,11 +188,15 @@ mapping: dict[str, TuyaBLECategoryLockMapping] = {
+                     # dp 47 = lock_motor_state. False = locked, True = unlocked.
+                     dp_id=47,
+                     value_means_locked=False,
+-                    # The K20 has no dp 52, so a keep-alive NOP is not
+-                    # possible; it connects on demand instead.
++                    # The K20 has no dp 52, so the keep-alive is a status request
++                    # instead (see send_nop_request). Persistent connection is
++                    # opt-in ("Keep connected" option), default: on demand.
+                     dp_id_nop=52,
+                     keep_connect=False,
+                     keep_connect_timer=60,
++                    # A sleeping K20 may run a queued command only after it
++                    # wakes up, which can take well over 12 s.
++                    jam_timeout=90,
+                     description=LockEntityDescription(
+                         key="manual_lock"
+                     ),
+@@ -269,7 +277,13 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
+     def send_nop_request(self):
+         """Periodically touch a dummy DP to keep the BLE session alive."""
+         while not self._keep_connect_stop.wait(self._mapping.keep_connect_timer):
+-            if self._datapoint_nop:
++            if self._device.product_id == "zyvo0vlb":
++                # The K20 has no dp 52 to write: keep the session alive with a
++                # status request instead.
++                asyncio.run_coroutine_threadsafe(
++                    self._device.update(), self._hass.loop
++                )
++            elif self._datapoint_nop:
+                 self._hass.create_task(self._datapoint_nop.set_value(True))
+ 
+     async def async_will_remove_from_hass(self) -> None:
+@@ -344,6 +358,8 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
+             )
+ 
+         self._target_state = state
++        # A new command starts a fresh attempt: drop a previous jam report.
++        self._isjammed = False
+         self._update_attrs()
+         self.async_write_ha_state()
+ 
+@@ -420,6 +436,7 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
+     def update_device_state(self):
+         datapoint = self._device.datapoints[self._mapping.dp_id]
+         if datapoint:
++            previous_state = self._current_state
+             is_set = bool(datapoint.value)
+             if self._mapping.value_means_locked:
+                 self._current_state = LockState.LOCKED if is_set else LockState.UNLOCKED
+@@ -427,12 +444,21 @@ class TuyaBLELock(TuyaBLEEntity, LockEntity):
+                 self._current_state = LockState.UNLOCKED if is_set else LockState.LOCKED
+             if self._commanded:
+                 if ( self._current_state != self._target_state):
+-                    if ( datetime.now() > self._commanded_timer + timedelta(seconds = 12) ):
++                    if ( datetime.now() > self._commanded_timer + timedelta(seconds = self._mapping.jam_timeout) ):
+                         self._isjammed = True
+                         self._commanded = False
+                 else:
+                     self._commanded = False
+                     self._isjammed = False
++            elif self._isjammed and (
++                self._current_state == self._target_state
++                or self._current_state != previous_state
++            ):
++                # The jam flag is only set after the command timed out. If the
++                # lock reaches the commanded state later (a delayed command on
++                # a sleeping lock) or changes state on its own (key, keypad),
++                # the flag is stale and must not stay set forever.
++                self._isjammed = False
+ 
+     @callback
+     def _handle_coordinator_update(self) -> None:
+@@ -471,7 +497,7 @@ async def async_setup_entry(
+     raykube_keep_connected = bool(entry.options.get(CONF_KEEP_CONNECTED, False))
+     for mapping in mappings:
+         runtime_mapping = mapping
+-        if data.device.product_id in ("hc7n0urm", "y2yaegze"):
++        if data.device.product_id in ("hc7n0urm", "y2yaegze", "zyvo0vlb"):
+             runtime_mapping = replace(
+                 mapping,
+                 keep_connect=raykube_keep_connected,
+diff --git a/custom_components/tuya_local_ble/sensor.py b/custom_components/tuya_local_ble/sensor.py
+index d2dbe4d..50dc506 100644
+--- a/custom_components/tuya_local_ble/sensor.py
++++ b/custom_components/tuya_local_ble/sensor.py
+@@ -243,6 +243,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
+                     dp_id=21,
+                     description=SensorEntityDescription(
+                         key="alarm_lock",
++                        entity_registry_enabled_default=False,
+                         icon="mdi:alarm-light",
+                         device_class=SensorDeviceClass.ENUM,
+                         options=[
+@@ -267,6 +268,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
+                     dp_id=12,
+                     description=SensorEntityDescription(
+                         key="last_fingerprint_unlock_slot",
++                        entity_registry_enabled_default=False,
+                         icon="mdi:fingerprint",
+                         entity_category=EntityCategory.DIAGNOSTIC,
+                     ),
+@@ -275,6 +277,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
+                     dp_id=13,
+                     description=SensorEntityDescription(
+                         key="last_password_unlock_id",
++                        entity_registry_enabled_default=False,
+                         icon="mdi:dialpad",
+                         entity_category=EntityCategory.DIAGNOSTIC,
+                     ),
+@@ -283,6 +286,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
+                     dp_id=15,
+                     description=SensorEntityDescription(
+                         key="last_card_unlock_id",
++                        entity_registry_enabled_default=False,
+                         icon="mdi:card-account-details",
+                         entity_category=EntityCategory.DIAGNOSTIC,
+                     ),
+@@ -291,6 +295,7 @@ mapping: dict[str, TuyaBLECategorySensorMapping] = {
+                     dp_id=19,
+                     description=SensorEntityDescription(
+                         key="last_ble_unlock_id",
++                        entity_registry_enabled_default=False,
+                         icon="mdi:bluetooth",
+                         entity_category=EntityCategory.DIAGNOSTIC,
+                     ),
+diff --git a/custom_components/tuya_local_ble/switch.py b/custom_components/tuya_local_ble/switch.py
+index dfc3e3f..0e82997 100644
+--- a/custom_components/tuya_local_ble/switch.py
++++ b/custom_components/tuya_local_ble/switch.py
+@@ -174,10 +174,13 @@ mapping: dict[str, TuyaBLECategorySwitchMapping] = {
+             ],
+             "zyvo0vlb": [  # Raykube K20
+                 TuyaBLESwitchMapping(
++                    # dp 33 is labelled "automatic_lock" in the Tuya schema,
++                    # but on the K20 it behaves as passage mode: the door
++                    # stays unlocked while it is on.
+                     dp_id=33,
+                     description=SwitchEntityDescription(
+-                        key="automatic_lock",
+-                        icon="mdi:lock-clock",
++                        key="passage_mode",
++                        icon="mdi:door-open",
+                         entity_category=EntityCategory.CONFIG,
+                     ),
+                 ),
+diff --git a/custom_components/tuya_local_ble/translations/cs.json b/custom_components/tuya_local_ble/translations/cs.json
+index a1668f1..ea3dc0b 100644
+--- a/custom_components/tuya_local_ble/translations/cs.json
++++ b/custom_components/tuya_local_ble/translations/cs.json
+@@ -64,8 +64,8 @@
+       }
+     },
+     "switch": {
+-      "automatic_lock": {
+-        "name": "Automatické zamykání"
++      "passage_mode": {
++        "name": "Průchozí režim (trvale odemčeno)"
+       }
+     }
+   }
+diff --git a/custom_components/tuya_local_ble/translations/en.json b/custom_components/tuya_local_ble/translations/en.json
+index dc5ac16..caff28c 100644
+--- a/custom_components/tuya_local_ble/translations/en.json
++++ b/custom_components/tuya_local_ble/translations/en.json
+@@ -215,6 +215,9 @@
+         "automatic_lock": {
+           "name": "Auto Lock"
+         },
++        "passage_mode": {
++          "name": "Passage Mode"
++        },
+         "programming_mode": {
+           "name": "Programming Mode" 
+         },
+diff --git a/docs/raykube-k20-zyvo0vlb.md b/docs/raykube-k20-zyvo0vlb.md
+index 7660e01..7928fec 100644
+--- a/docs/raykube-k20-zyvo0vlb.md
++++ b/docs/raykube-k20-zyvo0vlb.md
+@@ -26,13 +26,13 @@ hardware yet. Please report back if they work for you:
+ 
+ | Entity | Type | DP | Notes |
+ |---|---|---|---|
+-| Auto Lock | switch | 33 `automatic_lock` | |
++| Passage Mode | switch | 33 (`automatic_lock` in the Tuya schema) | on = door stays unlocked; behaves as passage mode, not auto-lock (confirmed on hardware) |
+ | Lock Volume | select | 31 `beep_volume` | mute / low / normal / high |
+ | Auto-lock Delay | select | 89 `autolock_delay_level` | off / 4 / 6 / 8 / 10 / 12 s |
+ | Battery | sensor | 8 `residual_electricity` | constant 100 % on mains-powered units |
+-| Alarm | sensor | 21 `alarm_lock` | wrong fingerprint/password/card, tamper, ... |
+-| Last fingerprint / password / card / Bluetooth unlock | sensors | 12 / 13 / 15 / 19 | ID or slot of the last unlock (diagnostic) |
+-| Doorbell | binary sensor | 24 `doorbell` | |
++| Alarm | sensor | 21 `alarm_lock` | disabled by default, needs *Keep connected* |
++| Last fingerprint / password / card / Bluetooth unlock | sensors | 12 / 13 / 15 / 19 | disabled by default, needs *Keep connected* |
++| Doorbell | binary sensor | 24 `doorbell` | disabled by default, needs *Keep connected* |
+ | Locked From Inside | binary sensor | 32 `reverse_lock` | inner deadbolt engaged |
+ 
+ The Czech translation (`translations/cs.json`) is included as a partial file;
+@@ -97,9 +97,16 @@ here sent with the classic V3 DPS command). Lock uses the plain `manual_lock` DP
+ - Entities of type sensor/binary sensor only receive new values while a BLE session is open,
+   so they can be stale or unavailable between commands. The settings entities (switch/select)
+   stay available and are written on demand.
+-- A persistent connection with a keep-alive is **not** implemented: the K20 does not
+-  have DP 52 (used as a no-op by other locks). An experiment that kept the link open by
+-  requesting the full status every 20 s did not improve stability.
++- **Alarm, doorbell and last-unlock sensors** are event data points: the lock only pushes
++  them while a BLE session is open. They are therefore disabled by default. To use them,
++  enable the entities and turn on *Keep connected (24/7)* in the device options. The K20
++  has no DP 52 (the no-op used by other locks), so the keep-alive requests the status every
++  60 s. This mode is experimental: an earlier test with a 20 s interval did not improve
++  stability, so leave it off if it makes the lock less reliable.
++- **Jammed state**: a sleeping lock may run a queued command only after waking up. The
++  lock entity waits 90 s (instead of 12 s) before reporting *jammed*, and the jammed flag
++  is cleared as soon as the lock reaches the commanded state later, changes state on its
++  own, or a new command is sent.
+ - `Unexpcted packet` / `Missing packet` errors in the Home Assistant log (a BLE notification
+   fragment was lost while reassembling a multi-packet reply) appeared occasionally during
+   testing, together with the occasional delay, even with a strong signal (-39 dBm).
+@@ -117,7 +124,7 @@ here sent with the classic V3 DPS command). Lock uses the plain `manual_lock` DP
+ | 24 | `doorbell` | bool | doorbell |
+ | 31 | `beep_volume` | enum | volume |
+ | 32 | `reverse_lock` | bool | locked from inside |
+-| 33 | `automatic_lock` | bool | auto lock |
++| 33 | `automatic_lock` | bool | passage mode (stays unlocked) |
+ | 46 | `manual_lock` | bool | remote lock |
+ | 47 | `lock_motor_state` | bool | lock state |
+ | 71 | `ble_unlock_check` | raw | remote unlock |
+-- 
+2.43.0
+
